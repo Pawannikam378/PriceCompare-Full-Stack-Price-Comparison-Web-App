@@ -1,8 +1,16 @@
 # 🛒 PriceCompare — Multi-Platform Price Comparison Web App
 
-A full-stack web application that compares product prices across multiple e-commerce platforms.
+A full-stack web application that compares product prices across multiple e-commerce platforms with real-time price history tracking.
 
-Built using **React (Frontend)** and **FastAPI (Backend)**, this project aggregates product data and helps users find the best deal instantly.
+Built using **React (Vite)** and **FastAPI**, this project aggregates product data, provides robust data visualization, and helps users find the best deal instantly.
+
+---
+
+## 📸 Visual Demo
+
+![PriceCompare UI](docs/screenshot.png)
+
+*The application automatically highlights the cheapest option (e.g., Flipkart) and visualizes price trends using interactive charts.*
 
 ---
 
@@ -15,19 +23,21 @@ Backend API: _(Add Render link)_
 
 ## 🎯 Features
 
-- 🔍 Search products across platforms
-- 💰 Compare prices (Amazon, Flipkart, Croma)
-- ⭐ View ratings
-- 🏆 Highlight cheapest option
-- ⚡ Fast API response
-- 🎨 Clean and responsive UI
+- 🔍 **Search & Aggregation:** Search products across platforms (Amazon, Flipkart, Croma) simultaneously.
+- 🏆 **Cheapest Option Highlight:** Automatically sorts and highlights the best price dynamically.
+- 📈 **Price History Tracking:** Automatically logs queries to an SQLite database (`pricecompare.db`), providing real-time history tracking.
+- 📊 **Data Visualization:** Interactive price-trend chart (Recharts) with Lowest/Highest stats and trend percentage.
+- 🎨 **Modern & Responsive UI:** Glassmorphism design, CSS micro-animations, and a built-in Dark/Light mode toggle.
+- ⚡ **FastAPI Backend:** Fast, modular, and asynchronous Python backend architecture.
 
 ---
 
 ## 🏗 Architecture
 
 ```
-User → React Frontend → FastAPI Backend → Scrapers → Aggregated Results
+User → React Frontend → FastAPI Backend → Simulated Scrapers → Aggregated Results
+                                      ↓
+                               SQLite Database (History)
 ```
 
 ---
@@ -36,30 +46,39 @@ User → React Frontend → FastAPI Backend → Scrapers → Aggregated Results
 
 ### Frontend
 - React (Vite)
-- Axios
-- CSS
+- Axios & Recharts
+- Vanilla CSS (CSS Variables, Flexbox/Grid)
 
 ### Backend
 - FastAPI
-- Python
-- Uvicorn
+- Python & Uvicorn
+- SQLite3 (database.py)
+- Pydantic
 
 ---
 
 ## 📂 Project Structure
 
 ```
-price_compare/
+PriceCompare/
 │── backend/
-│   │── main.py
-│   │── scrapers.py
-│   │── aggregator.py
+│   │── main.py            # FastAPI entry point
+│   │── database.py        # SQLite initialization and logic
+│   │── models.py          # Pydantic schemas
+│   │── scrapers.py        # Simulated marketplaces
+│   │── aggregator.py      # Ranking & cheapest calculation
 │   │── requirements.txt
 │
 │── frontend/
 │   │── src/
+│   │   │── components/    # SearchBar, ProductCard, PriceHistoryChart, LoadingSpinner
+│   │   │── services/      # Axios API (api.js)
+│   │   │── App.jsx & index.css
 │   │── package.json
+│   │── vite.config.js
 │
+│── docs/
+│   │── screenshot.png
 │── README.md
 ```
 
@@ -72,13 +91,10 @@ price_compare/
 ```bash
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload
+python -m uvicorn main:app --reload --port 8000
 ```
 
-Backend runs on:
-```
-http://localhost:8000
-```
+Backend runs on: `http://localhost:8000` (Swagger docs at `/docs`)
 
 ---
 
@@ -90,34 +106,57 @@ npm install
 npm run dev
 ```
 
-Frontend runs on:
-```
-http://localhost:5173
-```
+*Note: If your system `npm` is corrupted, you can bypass it by using a standalone local installer or yarn.*
+
+Frontend runs on: `http://localhost:5173`
 
 ---
 
-## 🔌 API Endpoint
+## 🔌 API Endpoints
 
-### GET /search
+### 1. `GET /search`
 
+Fetch aggregated results and persist them to the history database.
+
+```http
+GET /search?query=iphone
 ```
-/search?query=iphone
-```
 
-### Response:
-
+**Response:**
 ```json
 {
-  "product": "iphone",
+  "query": "iphone",
   "results": [
     {
       "platform": "Amazon",
       "price": 74999,
       "rating": 4.5,
-      "link": "..."
+      "link": "...",
+      "is_cheapest": false
     }
-  ]
+  ],
+  "cheapest": { /* The cheapest product object */ }
+}
+```
+
+### 2. `GET /history`
+
+Fetch aggregated daily price history for a given product search term.
+
+```http
+GET /history?product=iphone
+```
+
+**Response:**
+```json
+{
+  "product": "iphone",
+  "history": [
+    { "date": "2023-10-25", "price": 81000.0, "platform": "Amazon" },
+    { "date": "2023-10-25", "price": 79000.0, "platform": "Flipkart" }
+  ],
+  "lowest_price": 79000.0,
+  "highest_price": 81000.0
 }
 ```
 
@@ -125,31 +164,28 @@ http://localhost:5173
 
 ## 💡 How It Works
 
-1. User enters product name
-2. React sends request to FastAPI
-3. Backend fetches data (simulated/scraped)
-4. Aggregates results
-5. Sorts by price
-6. Returns response
-7. UI displays comparison
+1. User enters product name in the React UI.
+2. React sends request to FastAPI `/search` endpoint.
+3. Backend fetches simulated marketplace data.
+4. Aggregator sorts by price and flags the cheapest item.
+5. The `database.py` saves the search instance into the SQLite `products` table if it's not a duplicate.
+6. The frontend fetches the updated records from `/history` and paints a Recharts graph.
+7. User dynamically toggles Dark Mode or clicks external product links!
 
 ---
 
 ## 🚀 Future Improvements
 
-- Price history tracking
-- Price drop alerts
-- Real API integration
-- User accounts
-- Wishlist system
-- ML-based price prediction
+- User accounts & Wishlist system
+- Real-world production API integration
+- Price drop email alerts
+- ML-based price prediction forecasting
 
 ---
 
 ## ⚠ Disclaimer
 
-This project uses simulated or limited scraping for educational purposes.  
-Real-world applications should use official APIs and comply with platform policies.
+This project currently uses accurately simulated dynamic scraping (with reproducible seeded hashing) for educational and demonstration purposes. Real-world applications should use official APIs and comply with platform Terms of Service.
 
 ---
 
