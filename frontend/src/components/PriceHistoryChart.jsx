@@ -1,0 +1,148 @@
+/**
+ * PriceHistoryChart.jsx
+ * ---------------------------
+ * Renders a multi-line Recharts chart showing price history per platform.
+ * Also displays lowest price, highest price, and a trend indicator.
+ */
+
+import React, { useMemo } from 'react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  Legend, ResponsiveContainer,
+} from 'recharts';
+
+const PLATFORM_COLORS = {
+  Amazon:   '#FF9900',
+  Flipkart: '#2874F0',
+  Croma:    '#67B346',
+};
+
+/** Custom tooltip shown on hover */
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="chart-tooltip">
+        <p className="tooltip-date">{label}</p>
+        {payload.map((p) => (
+          <p key={p.dataKey} style={{ color: p.color }}>
+            {p.dataKey}: ₹{p.value?.toLocaleString('en-IN')}
+          </p>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
+
+const PriceHistoryChart = ({ historyData, productName }) => {
+  const { chartData, platforms } = useMemo(() => {
+    if (!historyData?.history?.length) return { chartData: [], platforms: [] };
+
+    // Pivot: date → { Amazon, Flipkart, Croma }
+    const dateMap = {};
+    const platformSet = new Set();
+
+    historyData.history.forEach(({ date, price, platform }) => {
+      if (!dateMap[date]) dateMap[date] = { date };
+      if (platform) {
+        dateMap[date][platform] = price;
+        platformSet.add(platform);
+      } else {
+        // Fallback: store as 'Price'
+        dateMap[date]['Price'] = price;
+        platformSet.add('Price');
+      }
+    });
+
+    return {
+      chartData: Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date)),
+      platforms: Array.from(platformSet),
+    };
+  }, [historyData]);
+
+  if (!historyData || !historyData.history?.length) return null;
+
+  const { lowest_price, highest_price } = historyData;
+
+  // Trend: compare last two data points across all platforms
+  const allPrices = historyData.history.map((h) => h.price);
+  const firstPrice = allPrices[0];
+  const lastPrice = allPrices[allPrices.length - 1];
+  const trendUp = lastPrice > firstPrice;
+  const trendDown = lastPrice < firstPrice;
+  const trendDiff = Math.abs(((lastPrice - firstPrice) / firstPrice) * 100).toFixed(1);
+
+  return (
+    <section className="history-section">
+      <h2 className="section-title">
+        📈 Price History
+        {productName && <span className="history-product-name"> – {productName}</span>}
+      </h2>
+
+      {/* Stats Row */}
+      <div className="stats-row">
+        <div className="stat-card stat-card--low">
+          <span className="stat-icon">⬇️</span>
+          <div>
+            <p className="stat-label">Lowest Price</p>
+            <p className="stat-value">₹{lowest_price?.toLocaleString('en-IN') ?? '—'}</p>
+          </div>
+        </div>
+        <div className="stat-card stat-card--high">
+          <span className="stat-icon">⬆️</span>
+          <div>
+            <p className="stat-label">Highest Price</p>
+            <p className="stat-value">₹{highest_price?.toLocaleString('en-IN') ?? '—'}</p>
+          </div>
+        </div>
+        <div className={`stat-card ${trendUp ? 'stat-card--up' : trendDown ? 'stat-card--down' : 'stat-card--flat'}`}>
+          <span className="stat-icon">{trendUp ? '📈' : trendDown ? '📉' : '➡️'}</span>
+          <div>
+            <p className="stat-label">Price Trend</p>
+            <p className="stat-value">
+              {trendUp ? '↑' : trendDown ? '↓' : '→'} {trendDiff}%
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="chart-wrapper">
+        <ResponsiveContainer width="100%" height={320}>
+          <LineChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+            <XAxis
+              dataKey="date"
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend
+              wrapperStyle={{ paddingTop: 16, color: 'var(--text-secondary)' }}
+            />
+            {platforms.map((platform) => (
+              <Line
+                key={platform}
+                type="monotone"
+                dataKey={platform}
+                stroke={PLATFORM_COLORS[platform] || '#8B5CF6'}
+                strokeWidth={2.5}
+                dot={{ r: 4, fill: PLATFORM_COLORS[platform] || '#8B5CF6' }}
+                activeDot={{ r: 7 }}
+                connectNulls
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </section>
+  );
+};
+
+export default PriceHistoryChart;
