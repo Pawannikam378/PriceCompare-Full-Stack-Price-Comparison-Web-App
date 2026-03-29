@@ -3,18 +3,20 @@
  * ---------------------------
  * Renders a multi-line Recharts chart showing price history per platform.
  * Also displays lowest price, highest price, and a trend indicator.
+ * Supports an optional "Predicted" reference line / dot on the chart.
  */
 
 import React, { useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer,
+  Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 
 const PLATFORM_COLORS = {
-  Amazon:   '#FF9900',
-  Flipkart: '#2874F0',
-  Croma:    '#67B346',
+  Amazon:    '#FF9900',
+  Flipkart:  '#2874F0',
+  Croma:     '#67B346',
+  Predicted: '#A855F7',   // purple for AI prediction
 };
 
 /** Custom tooltip shown on hover */
@@ -34,7 +36,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-const PriceHistoryChart = ({ historyData, productName }) => {
+const PriceHistoryChart = ({ historyData, productName, predictedPrice }) => {
   const { chartData, platforms } = useMemo(() => {
     if (!historyData?.history?.length) return { chartData: [], platforms: [] };
 
@@ -48,17 +50,33 @@ const PriceHistoryChart = ({ historyData, productName }) => {
         dateMap[date][platform] = price;
         platformSet.add(platform);
       } else {
-        // Fallback: store as 'Price'
         dateMap[date]['Price'] = price;
         platformSet.add('Price');
       }
     });
 
+    const sorted = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
+
+    // Append a "Predicted" data point if we have one
+    if (predictedPrice != null) {
+      const lastDate = sorted[sorted.length - 1]?.date ?? 'Predicted';
+      // Create a synthetic next date label
+      const lastDateObj = new Date(lastDate);
+      const nextDate = isNaN(lastDateObj.getTime())
+        ? 'Predicted'
+        : new Date(lastDateObj.getTime() + 86400000)
+            .toISOString()
+            .slice(0, 10);
+
+      sorted.push({ date: nextDate, Predicted: predictedPrice });
+      platformSet.add('Predicted');
+    }
+
     return {
-      chartData: Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date)),
+      chartData: sorted,
       platforms: Array.from(platformSet),
     };
-  }, [historyData]);
+  }, [historyData, predictedPrice]);
 
   if (!historyData || !historyData.history?.length) return null;
 
@@ -104,11 +122,20 @@ const PriceHistoryChart = ({ historyData, productName }) => {
             </p>
           </div>
         </div>
+        {predictedPrice != null && (
+          <div className="stat-card stat-card--predicted">
+            <span className="stat-icon">🤖</span>
+            <div>
+              <p className="stat-label">AI Predicted</p>
+              <p className="stat-value">₹{predictedPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Chart */}
       <div className="chart-wrapper">
-        <ResponsiveContainer width="100%" height={320}>
+        <ResponsiveContainer width="100%" height={340}>
           <LineChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
             <XAxis
@@ -126,14 +153,33 @@ const PriceHistoryChart = ({ historyData, productName }) => {
             <Legend
               wrapperStyle={{ paddingTop: 16, color: 'var(--text-secondary)' }}
             />
+            {/* Horizontal reference line for predicted price */}
+            {predictedPrice != null && (
+              <ReferenceLine
+                y={predictedPrice}
+                stroke="#A855F7"
+                strokeDasharray="6 3"
+                label={{
+                  value: 'AI Prediction',
+                  position: 'insideTopRight',
+                  fill: '#A855F7',
+                  fontSize: 11,
+                }}
+              />
+            )}
             {platforms.map((platform) => (
               <Line
                 key={platform}
-                type="monotone"
+                type={platform === 'Predicted' ? 'monotone' : 'monotone'}
                 dataKey={platform}
                 stroke={PLATFORM_COLORS[platform] || '#8B5CF6'}
-                strokeWidth={2.5}
-                dot={{ r: 4, fill: PLATFORM_COLORS[platform] || '#8B5CF6' }}
+                strokeWidth={platform === 'Predicted' ? 2 : 2.5}
+                strokeDasharray={platform === 'Predicted' ? '6 3' : undefined}
+                dot={
+                  platform === 'Predicted'
+                    ? { r: 7, fill: '#A855F7', stroke: '#fff', strokeWidth: 2 }
+                    : { r: 4, fill: PLATFORM_COLORS[platform] || '#8B5CF6' }
+                }
                 activeDot={{ r: 7 }}
                 connectNulls
               />

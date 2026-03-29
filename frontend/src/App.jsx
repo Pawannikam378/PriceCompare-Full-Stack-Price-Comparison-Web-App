@@ -4,9 +4,10 @@
  * Root application component.
  *
  * Features:
- *  - Product search  → /search API
+ *  - Product search  → /search API (real DummyJSON data)
  *  - Price comparison cards (sorted, cheapest highlighted)
  *  - Price history chart → /history API
+ *  - AI Price Prediction → /predict API
  *  - Dark / Light mode toggle
  *  - Error & empty states
  *  - Last search caching via localStorage
@@ -17,19 +18,21 @@ import SearchBar from './components/SearchBar';
 import ProductCard from './components/ProductCard';
 import PriceHistoryChart from './components/PriceHistoryChart';
 import LoadingSpinner from './components/LoadingSpinner';
-import { searchProducts, fetchPriceHistory } from './services/api';
+import Prediction from './components/Prediction';
+import { searchProducts, fetchPriceHistory, fetchPrediction } from './services/api';
 
 const App = () => {
   // ─── State ─────────────────────────────────────────────────────────────────
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('pricecompare-theme') !== 'light';
   });
-  const [searchResults, setSearchResults] = useState(null);   // SearchResponse
-  const [historyData, setHistoryData]     = useState(null);   // HistoryResponse
-  const [currentQuery, setCurrentQuery]   = useState(() => localStorage.getItem('pricecompare-last-search') || '');
-  const [isSearching, setIsSearching]     = useState(false);
-  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-  const [error, setError]                 = useState(null);
+  const [searchResults, setSearchResults]     = useState(null);
+  const [historyData, setHistoryData]         = useState(null);
+  const [predictionData, setPredictionData]   = useState(null);
+  const [currentQuery, setCurrentQuery]       = useState(() => localStorage.getItem('pricecompare-last-search') || '');
+  const [isSearching, setIsSearching]         = useState(false);
+  const [isPredicting, setIsPredicting]       = useState(false);
+  const [error, setError]                     = useState(null);
 
   // ─── Theme persistence ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -50,6 +53,7 @@ const App = () => {
     setError(null);
     setSearchResults(null);
     setHistoryData(null);
+    setPredictionData(null);
     setIsSearching(true);
     localStorage.setItem('pricecompare-last-search', query);
 
@@ -68,11 +72,22 @@ const App = () => {
       if (history.status === 'fulfilled') {
         setHistoryData(history.value);
       }
-      // History failures are silent; we simply show no chart
     } catch (err) {
       setError(err.message || 'Something went wrong. Is the backend running?');
     } finally {
       setIsSearching(false);
+    }
+
+    // Fetch AI prediction separately (non-blocking, shows after search)
+    setIsPredicting(true);
+    try {
+      const prediction = await fetchPrediction(query);
+      setPredictionData(prediction);
+    } catch (err) {
+      console.warn('Prediction fetch failed (non-critical):', err.message);
+      setPredictionData(null);
+    } finally {
+      setIsPredicting(false);
     }
   }, []);
 
@@ -89,7 +104,7 @@ const App = () => {
             <span className="logo-icon">💸</span>
             <div>
               <h1 className="logo-title">PriceCompare</h1>
-              <p className="logo-tagline">Smart price tracking across India's top shops</p>
+              <p className="logo-tagline">AI-powered price tracking across India's top shops</p>
             </div>
           </div>
           <button
@@ -106,7 +121,7 @@ const App = () => {
       {/* ── Hero / Search ── */}
       <section className="hero">
         <h2 className="hero-title">Find the <span className="gradient-text">Best Price</span> Instantly</h2>
-        <p className="hero-sub">Compare across Amazon, Flipkart &amp; Croma in one click</p>
+        <p className="hero-sub">Real prices from Amazon, Flipkart &amp; Croma · Powered by AI prediction</p>
         <SearchBar onSearch={handleSearch} isLoading={isSearching} />
       </section>
 
@@ -132,7 +147,7 @@ const App = () => {
           <div className="empty-state">
             <span className="empty-icon">🔎</span>
             <h3>No Results Found</h3>
-            <p>We couldn't find any prices for "<strong>{currentQuery}</strong>". Try a different search.</p>
+            <p>We couldn't find any prices for &quot;<strong>{currentQuery}</strong>&quot;. Try a different search.</p>
           </div>
         )}
 
@@ -151,7 +166,7 @@ const App = () => {
             )}
 
             <h2 className="section-title">
-              Comparing prices for "<span className="query-text">{currentQuery}</span>"
+              Comparing prices for &quot;<span className="query-text">{currentQuery}</span>&quot;
             </h2>
 
             <div className="cards-grid">
@@ -162,23 +177,36 @@ const App = () => {
           </section>
         )}
 
-        {/* Price History Chart */}
+        {/* AI Price Prediction */}
+        {!isSearching && (searchResults?.results?.length > 0 || isPredicting || predictionData) && (
+          <Prediction
+            predictionData={predictionData}
+            productName={currentQuery}
+            isLoading={isPredicting}
+          />
+        )}
+
+        {/* Price History Chart (with predicted point) */}
         {!isSearching && historyData && (
-          <PriceHistoryChart historyData={historyData} productName={currentQuery} />
+          <PriceHistoryChart
+            historyData={historyData}
+            productName={currentQuery}
+            predictedPrice={predictionData?.predicted_price ?? null}
+          />
         )}
 
         {/* No history info hint */}
         {!isSearching && searchResults && searchResults.results.length > 0 && historyData && historyData.history.length === 0 && (
           <div className="hint-card">
             <span>💡</span>
-            <p>Search a few more times to build up price history data for this product.</p>
+            <p>Search a few more times to build up price history and enable AI prediction for this product.</p>
           </div>
         )}
       </main>
 
       {/* ── Footer ── */}
       <footer className="footer">
-        <p>© 2025 PriceCompare · Data is simulated for demonstration purposes · Not affiliated with any marketplace</p>
+        <p>© 2025 PriceCompare · Real data via DummyJSON · AI prediction powered by Linear Regression</p>
       </footer>
     </div>
   );

@@ -4,8 +4,10 @@ main.py
 FastAPI application entry point.
 
 Endpoints:
-  GET /search?query=<product>   – returns sorted price results from all platforms
-  GET /history?product=<name>   – returns price history from the database
+  GET /              – health check
+  GET /search?query= – compare prices from real API across platforms
+  GET /history?product= – returns price history from the database
+  GET /predict?product= – AI-powered price prediction (Linear Regression)
 
 Run with:
   uvicorn main:app --reload
@@ -19,7 +21,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, save_product, get_price_history
 from aggregator import aggregate_results
-from models import SearchResponse, HistoryResponse, PriceHistoryEntry
+from models import SearchResponse, HistoryResponse, PriceHistoryEntry, PredictionResponse
+from ml_model import predict_price
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -51,8 +54,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PriceCompare API",
-    description="Compare product prices across Amazon, Flipkart and Croma with history tracking.",
-    version="1.0.0",
+    description=(
+        "Compare real product prices across Amazon, Flipkart and Croma "
+        "with price history tracking and AI-powered price prediction."
+    ),
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -75,7 +81,7 @@ app.add_middleware(
 @app.get("/", tags=["Health"])
 async def root():
     """Health-check endpoint."""
-    return {"status": "ok", "message": "PriceCompare API is running."}
+    return {"status": "ok", "message": "PriceCompare API v2 is running."}
 
 
 @app.get("/search", response_model=SearchResponse, tags=["Search"])
@@ -83,12 +89,12 @@ async def search(
     query: str = Query(..., min_length=1, max_length=200, description="Product name to search"),
 ):
     """
-    Search for a product across all marketplaces.
+    Search for a product across all marketplaces using real DummyJSON API.
 
-    - Simulates price fetch from Amazon, Flipkart, Croma.
+    - Fetches real product data and derives platform-specific prices.
     - Sorts results by price (ascending).
     - Marks the cheapest option.
-    - Persists each result to the database (with same-session dedup).
+    - Persists each result to the database for history tracking.
     """
     logger.info("Search request: '%s'", query)
 
@@ -101,7 +107,7 @@ async def search(
         logger.exception("Aggregator error for query '%s': %s", query, exc)
         raise HTTPException(status_code=500, detail="Failed to fetch price data.") from exc
 
-    # Persist results to DB (non-blocking; errors are logged, not raised)
+    # Persist results to DB (errors are logged, not raised)
     for result in response.results:
         try:
             save_product(query.strip(), result.platform, result.price)
@@ -148,4 +154,45 @@ async def history(
         history=history_entries,
         lowest_price=min(prices),
         highest_price=max(prices),
+    )
+
+
+@app.get("/predict", response_model=PredictionResponse, tags=["AI Prediction"])
+async def predict(
+    product: str = Query(..., min_length=1, max_length=200, description="Product name for price prediction"),
+):
+    """
+    Predict the next price for a product using AI (Linear Regression).
+
+    - Reads historical price data from the database.
+    - Trains a Linear Regression model on price vs. time index.
+    - Returns the predicted next price and trend direction (UP/DOWN/STABLE).
+    - Returns a message if insufficient history data is available.
+
+    Tip: Search for a product multiple times to build up history, then call /predict.
+    """
+    logger.info("Predict request: '%s'", product)
+
+    try:
+        result = predict_price(product.strip())
+    except Exception as exc:
+        logger.exception("Prediction error for '%s': %s", product, exc)
+        raise HTTPException(status_code=500, detail="Failed to run price prediction.") from exc
+
+    if result is None:
+        return PredictionResponse(
+            product=product,
+            predicted_price=None,
+            trend=None,
+            message=(
+                "Not enough price history to make a prediction. "
+                "Search for this product a few times first to build up history."
+            ),
+        )
+
+    return PredictionResponse(
+        product=product,
+        predicted_price=result["predicted_price"],
+        trend=result["trend"],
+        message=None,
     )

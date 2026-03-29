@@ -4,8 +4,8 @@ models.py
 Pydantic schemas used for request validation and API response serialization.
 """
 
-from pydantic import BaseModel, HttpUrl, Field
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, Literal
 
 
 class ProductResult(BaseModel):
@@ -48,3 +48,26 @@ class HistoryResponse(BaseModel):
     history: list[PriceHistoryEntry]
     lowest_price: Optional[float] = None
     highest_price: Optional[float] = None
+
+
+class PredictionResponse(BaseModel):
+    """AI price prediction response."""
+    product: str
+    predicted_price: Optional[float] = Field(None, description="Predicted next price in INR")
+    trend: Optional[Literal["UP", "DOWN", "STABLE"]] = Field(
+        None, description="Price trend direction"
+    )
+    message: Optional[str] = Field(
+        None,
+        description="Info message, e.g. when insufficient history is available"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "product": "iphone",
+                "predicted_price": 79850.0,
+                "trend": "UP",
+                "message": None,
+            }
+        }

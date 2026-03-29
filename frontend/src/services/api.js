@@ -25,7 +25,7 @@ api.interceptors.response.use(
 );
 
 /**
- * Search for a product across all marketplaces.
+ * Search for a product across all marketplaces (uses real DummyJSON API).
  * @param {string} query - Product name
  * @returns {Promise<SearchResponse>}
  */
@@ -41,5 +41,15 @@ export const searchProducts = async (query) => {
  */
 export const fetchPriceHistory = async (product) => {
   const { data } = await api.get('/history', { params: { product } });
+  return data;
+};
+
+/**
+ * Fetch AI price prediction for a product.
+ * @param {string} product - Product name
+ * @returns {Promise<PredictionResponse>}
+ */
+export const fetchPrediction = async (product) => {
+  const { data } = await api.get('/predict', { params: { product } });
   return data;
 };

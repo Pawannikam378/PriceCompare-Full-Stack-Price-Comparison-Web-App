@@ -1,12 +1,15 @@
 """
 aggregator.py
 -------------
-Combines results from all marketplace scrapers, sorts by price (ascending),
+Combines results from api_fetcher (real DummyJSON data), sorts by price (ascending),
 and marks the cheapest option.
+
+Falls back to simulated scrapers if the real API returns no results.
 """
 
 import logging
 from models import ProductResult, SearchResponse
+from api_fetcher import fetch_products
 from scrapers import scrape_amazon, scrape_flipkart, scrape_croma
 
 logger = logging.getLogger(__name__)
@@ -14,8 +17,10 @@ logger = logging.getLogger(__name__)
 
 def aggregate_results(query: str) -> SearchResponse:
     """
-    Run all scrapers concurrently (simulated sequentially here since they're
-    in-memory), filter out failures, sort by price, and mark cheapest.
+    Fetch real product listings from DummyJSON API, apply platform-specific
+    pricing, sort by price, and mark the cheapest.
+
+    Falls back to simulated scrapers if the real API is unavailable.
 
     Args:
         query: The product search term.
@@ -25,15 +30,20 @@ def aggregate_results(query: str) -> SearchResponse:
     """
     logger.info("Aggregating results for query: '%s'", query)
 
-    # Gather results from each platform
-    raw_results: list[ProductResult | None] = [
-        scrape_amazon(query),
-        scrape_flipkart(query),
-        scrape_croma(query),
-    ]
+    # Try real API first
+    results: list[ProductResult] = fetch_products(query)
 
-    # Filter failures
-    results: list[ProductResult] = [r for r in raw_results if r is not None]
+    # Fallback to simulated scrapers if real API returned nothing
+    if not results:
+        logger.warning(
+            "Real API returned no results for '%s'. Falling back to simulated data.", query
+        )
+        raw: list[ProductResult | None] = [
+            scrape_amazon(query),
+            scrape_flipkart(query),
+            scrape_croma(query),
+        ]
+        results = [r for r in raw if r is not None]
 
     if not results:
         logger.warning("No results returned for query: '%s'", query)
